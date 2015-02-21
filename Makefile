@@ -1,19 +1,19 @@
 # The name of your sketch (used to find TARGET.ino and to name the compiled .hex file)
-TARGET := blink
+TARGET := multicopter
 
 # Libraries
-USER_LIBRARIES := SdFat
-CORE_LIBRARIES :=  SPI Wire
+USER_LIBRARIES :=
+CORE_LIBRARIES :=
 USER_LIB_HOME := ../libraries
 
 # Arduino IDE installation location
 ARDUINO_HOME := /Applications/Arduino.app/Contents/Resources/Java
 
 # Configurable options
-OPTIONS = -DF_CPU=48000000 -DUSB_RAWHID -DLAYOUT_US_ENGLISH
+OPTIONS = -DF_CPU=96000000 -DUSB_SERIAL -DLAYOUT_US_ENGLISH
 
 # Options needed by many Arduino libraries to configure for Teensy 3.1
-OPTIONS += -D__MK20DX256__ -DARDUINO=105 -DTEENSYDUINO=118
+OPTIONS += -D__MK20DX256__ -DARDUINO=106 -DTEENSYDUINO=120
 
 #************************************************************************
 # Location of Teensyduino utilities, Toolchain, and Arduino Libraries.
@@ -75,6 +75,7 @@ SIZE := $(abspath $(COMPILERPATH))/arm-none-eabi-size
 C_FILES := $(wildcard *.c) $(LIBRARY_C_FILES) $(wildcard $(TEENSY_HOME)/*.c)
 CPP_FILES := $(wildcard *.cpp) $(LIBRARY_CPP_FILES) $(wildcard $(TEENSY_HOME)/*.cpp)
 CPP_FILES := $(filter-out $(TEENSY_HOME)/main.cpp, $(CPP_FILES))
+#ABSOLUTE_OBJS := multicopter.o $(C_FILES:.c=.o) $(CPP_FILES:.cpp=.o)
 ABSOLUTE_OBJS := $(C_FILES:.c=.o) $(CPP_FILES:.cpp=.o)
 OBJS := $(addprefix $(OBJ_DIR)/, $(notdir $(ABSOLUTE_OBJS)))
 OBJ_DEPS := $(OBJS:.o=.d)
@@ -88,9 +89,9 @@ $(TARGET).elf: $(OBJS) $(TEENSY_HOME)/mk20dx256.ld
 	@echo "[LINK] $@"
 	@$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
 
-#$(OBJ_DIR)/$(TARGET).o: $(TARGET).ino
-#	@echo "[INO] $<"
-#	@$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o "$@" -c -x c++ -include Arduino.h "$<"
+# $(OBJ_DIR)/$(TARGET).o: $(TARGET).ino
+# 	@echo "[INO] $<"
+# 	@$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o "$@" -c -x c++ -include Arduino.h "$<"
 
 %.hex: %.elf
 	$(SIZE) $<
