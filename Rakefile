@@ -1,95 +1,169 @@
-require "json"
+#Rake.application.options.trace_rules = true
 require "rake/clean"
+require 'rake/loaders/makefile'
+require 'tempfile'
 
-if File.exists?("project.json")
-  CONFIG = JSON.parse(File.read("project.json"))
-else
-  CONFIG = {}
-end
+TARGET = "multicopter"
 
-CONFIG["target"] ||= "main"
-CONFIG["options"] ||= ["-DF_CPU=96000000", "-DUSB_SERIAL", "-DLAYOUT_US_ENGLISH", "-D__MK20DX256__", "-DARDUIO=104"]
-CONFIG["tools_path"] ||= "/Applications/Arduino.app/Contents/Resources/Java/hardware/tools"
-CONFIG["arduino_libs"] ||= []
-CONFIG["libraries"] ||= "../libraries"
-CONFIG["arduino_libs_path"] ||= "/Applications/Arduino.app/Contents/Resources/Java/libraries"
-CONFIG["compiler_path"] ||= "/Applications/Arduino.app/Contents/Resources/Java/hardware/tools/arm-none-eabi/bin"
-CONFIG["core_path"] ||= "/Applications/Arduino.app/Contents/Resources/Java/hardware/teensy/cores/teensy3"
-CONFIG["build_dir"] ||= "build"
+USER_LIBRARIES = []
+CORE_LIBRARIES = ["SPI"]
 
-# preprocessor flags
-CONFIG["cppflags"] ||= ["-Wall", "-g", "-Os", "-mcpu=cortex-m4", "-mthumb", "-nostdlib", "-MMD", "-ffunction-sections", "-fdata-sections"]
-# c++ flags
-CONFIG["cxxflags"] ||= ["-std=gnu++0x", "-felide-constructors", "-fno-exceptions", "-fno-rtti", "-fpermissive"]
-# c flags
-CONFIG["cflags"] ||= []
-# linker flags
-CONFIG["ldflags"] ||= ["-Os", "-Wl,--gc-sections", "-mcpu=cortex-m4", "-mthumb", "-T#{CONFIG["core_path"]}/mk20dx256.ld"]
-# additional libraries
-CONFIG["libs"] ||= []#["-lm", "-larm_cortexM4l_math"]
+USER_LIB_HOME = "libraries"
 
-CC      = "#{CONFIG["compiler_path"]}/arm-none-eabi-gcc"
-CXX     = "#{CONFIG["compiler_path"]}/arm-none-eabi-g++"
-OBJCOPY = "#{CONFIG["compiler_path"]}/arm-none-eabi-objcopy"
-SIZE    = "#{CONFIG["compiler_path"]}/arm-none-eabi-size"
+# Arduino IDE installation location
+ARDUINO_HOME = "/Applications/Arduino.app/Contents/Resources/Java"
 
-hex_file = "#{CONFIG["build_dir"]}/#{CONFIG["target"]}.hex"
-elf_file = "#{CONFIG["build_dir"]}/#{CONFIG["target"]}.elf"
+# Configurable options
+OPTIONS = [
+  "-DF_CPU=96000000",
+  "-DUSB_SERIAL",
+  "-DLAYOUT_US_ENGLISH",
+  "-D__MK20DX256__",
+  "-DARDUINO=106",
+  "-DTEENSYDUINO=120"
+]
 
-SRC = FileList['*.c', '*.cpp', "#{CONFIG["libraries"]}/**/*.c", "#{CONFIG["libraries"]}/**/*.cpp", "#{CONFIG["core_path"]}/**/*.c", "#{CONFIG["core_path"]}/**/*.cpp"]
+#************************************************************************
+# Location of Teensyduino utilities, Toolchain, and Arduino Libraries.
+# To use this makefile without Arduino, copy the resources from these
+# locations and edit the pathnames.  The rest of Arduino is not needed.
+#************************************************************************
 
-# add the arduino libs
-CONFIG["arduino_libs"].each do |lib|
-  if File.exists?("#{CONFIG["arduino_libs_path"]}/#{lib}")
-    SRC.include("#{CONFIG["arduino_libs_path"]}/#{lib}/*.c", "#{CONFIG["arduino_libs_path"]}/#{lib}/*.cpp")
+# Arduino/Teensy files, Core libs
+ARDUINO_HW_HOME = "#{ARDUINO_HOME}/hardware"
+CORE_LIB_HOME = "#{ARDUINO_HOME}/libraries"
+TEENSY_HOME = "#{ARDUINO_HW_HOME}/teensy/cores/teensy3"
+
+# path location for Teensy Loader, teensy_post_compile and teensy_reboot
+TOOLS_PATH = "#{ARDUINO_HW_HOME}/tools"
+
+# path location for the arm-none-eabi compiler
+COMPILER_PATH = "#{ARDUINO_HW_HOME}/tools/arm-none-eabi/bin"
+
+# where to store build output files
+OBJ_DIR = "build"
+
+#************************************************************************
+# Library includes and sources
+#************************************************************************
+
+SOURCE_FILES = FileList.new do |fl|
+  CORE_LIBRARIES.each do |lib|
+    fl.include "#{CORE_LIB_HOME}/#{lib}/*.c", "#{CORE_LIB_HOME}/#{lib}/*.cpp"
   end
+  fl.include "./**/*.c", "./**/*.cpp"
+  fl.include "#{TEENSY_HOME}/**/*.c", "#{TEENSY_HOME}/**/*.cpp"
+  fl.exclude "#{TEENSY_HOME}/main.cpp"
 end
+OBJECT_FILES = SOURCE_FILES.pathmap("#{OBJ_DIR}/%n.o")
+INCLUDE_PATHS = SOURCE_FILES.pathmap("%d").uniq
+HEX_FILE = "#{TARGET}.hex"
+ELF_FILE = "#{TARGET}.elf"
 
-OBJ = SRC.collect { |fn| File.join(CONFIG["build_dir"], File.basename(fn).ext('o')) }
-
-INCLUDES = [".", CONFIG["core_path"]]
-SRC.each do |f|
-  dir = File.dirname(f)
-  INCLUDES << dir unless INCLUDES.include?(dir)
-end
-INCLUDES.map! { |dir| "-I#{dir}" }
-
-puts OBJ
+puts SOURCE_FILES
 puts
-puts SRC
 puts
-puts INCLUDES
+puts INCLUDE_PATHS
+puts
+puts
+puts OBJECT_FILES
+puts
 puts
 
-CLEAN.include(OBJ, hex_file, elf_file, CONFIG["build_dir"])
+#************************************************************************
+# Settings below this point usually do not need to be edited
+#************************************************************************
 
-desc "create the hex file"
-task :compile => [hex_file]
+# CPPFLAGS = compiler options for C and C++
+CPPFLAGS = [
+  "-Wall",
+  "-g",
+  "-Os",
+  "-mcpu=cortex-m4",
+  "-mthumb",
+  "-nostdlib",
+  #"-MMD",
+  "-fdata-sections",
+  "-ffunction-sections",
+  OPTIONS,
+  INCLUDE_PATHS.map { |path| "-I#{path}" }
+].flatten.join(" ")
 
-file hex_file => [elf_file] do |t|
-  sh "#{SIZE} #{elf_file}"
-  sh "#{OBJCOPY} -O ihex -R .eeprom #{elf_file} #{t.name}"
+# compiler options for C++ only
+CXXFLAGS = [
+  "-std=gnu++0x",
+  "-felide-constructors",
+  "-fno-exceptions",
+  "-fno-rtti"
+].join(" ")
+
+# compiler options for C only
+CFLAGS = [].join(" ")
+
+# linker options
+LDFLAGS = [
+  "-Os",
+  "-Wl,--gc-sections",
+  "-mcpu=cortex-m4",
+  "-mthumb",
+  "-T#{TEENSY_HOME}/mk20dx256.ld"
+].join(" ")
+
+# additional libraries to link
+LIBS = [
+  "-lm",
+  "-larm_cortexM4l_math"
+].join(" ")
+
+# names for the compiler programs
+CC = "#{COMPILER_PATH}/arm-none-eabi-gcc"
+CXX = "#{COMPILER_PATH}/arm-none-eabi-g++"
+OBJCOPY = "#{COMPILER_PATH}/arm-none-eabi-objcopy"
+SIZE = "#{COMPILER_PATH}/arm-none-eabi-size"
+
+directory OBJ_DIR
+CLEAN.include(OBJ_DIR)
+
+import ".depends.mf"
+#Rake::MakefileLoader.new.load(".depends.mf") if File.file?(".depends.mf")
+
+task :default => HEX_FILE
+
+file HEX_FILE => ELF_FILE do
+	sh "#{SIZE} #{OBJ_DIR}/#{ELF_FILE}"
+	sh "#{OBJCOPY} -O ihex -R .eeprom #{OBJ_DIR}/#{ELF_FILE} #{OBJ_DIR}/#{HEX_FILE}"
 end
 
-file elf_file => OBJ do |t|
-  args = CONFIG["ldflags"] + CONFIG["libs"]
-  sh "#{CC} #{args.join(" ")} -o #{t.name} #{t.prerequisites.join(" ")} -Lbuild"
+file ELF_FILE => OBJECT_FILES do
+  sh "#{CC} #{LDFLAGS} -o #{OBJ_DIR}/#{ELF_FILE} #{OBJECT_FILES} #{LIBS}"
 end
 
-directory CONFIG["build_dir"]
+rule ".o" => [->(name){ lookup_source_file(name) }, OBJ_DIR] do |t|
+  puts "#{t.source} -> #{t.name}"
 
-rule ".o" => lambda { |objfile| find_source(objfile) } do |t|
-  Rake::Task[CONFIG["build_dir"]].invoke
-  args = CONFIG["options"] + CONFIG["cppflags"] + INCLUDES
   if File.extname(t.source) == ".c"
-    sh "#{CC} #{args.join(" ")} #{t.source} -c -o #{t.name}"
+	  sh "#{CC} -c #{CPPFLAGS} #{CFLAGS} -o \"#{t.name}\" \"#{t.source}\""
   else
-    args += CONFIG["cxxflags"]
-    sh "#{CXX} #{args.join(" ")} -x c++ #{t.source} -c -o #{t.name}"
+	  sh "#{CXX} -c #{CPPFLAGS} #{CXXFLAGS} -o \"#{t.name}\" \"#{t.source}\""
   end
 end
 
-def find_source(objfile)
-  base = File.basename(objfile, '.o')
-  SRC.find { |s| File.basename(s, '.c') == base || File.basename(s, '.cpp') == base }
+file ".depends.mf" => SOURCE_FILES do |t|
+  sh "makedepend -f- -- #{CPPFLAGS} -- #{t.prerequisites.join(" ")} > #{t.name}"
+
+  path = ".depends.mf"
+  temp_file = Tempfile.new(".depends.mf.temp")
+  File.open(path, 'r') do |file|
+    file.each_line do |line|
+      next if line =~ /#/ || line =~ /^$/
+      file = line[/^[^:]+/]
+      temp_file.puts line.sub(file, File.join(OBJ_DIR, File.basename(file)))
+    end
+  end
+  temp_file.close
+  FileUtils.mv(temp_file.path, path)
+end
+
+def lookup_source_file(file)
+  SOURCE_FILES.detect { |f| File.basename(f).ext("") == File.basename(file).ext("") }
 end
