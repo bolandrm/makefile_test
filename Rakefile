@@ -130,8 +130,8 @@ import "#{OBJ_DIR}/.depends.mf"
 task :default => HEX_FILE
 
 file HEX_FILE => [OBJ_DIR, ELF_FILE] do
-	sh "#{SIZE} #{OBJ_DIR}/#{ELF_FILE}"
-	sh "#{OBJCOPY} -O ihex -R .eeprom #{OBJ_DIR}/#{ELF_FILE} #{OBJ_DIR}/#{HEX_FILE}"
+  sh "#{SIZE} #{OBJ_DIR}/#{ELF_FILE}"
+  sh "#{OBJCOPY} -O ihex -R .eeprom #{OBJ_DIR}/#{ELF_FILE} #{OBJ_DIR}/#{HEX_FILE}"
 end
 
 file ELF_FILE => OBJECT_FILES do
@@ -142,9 +142,9 @@ rule ".o" => ->(name){ lookup_source_file(name) } do |t|
   puts "COMPL #{t.source} -> #{t.name}"
 
   if File.extname(t.source) == ".c"
-	  sh "#{CC} -c #{CPPFLAGS} #{CFLAGS} -o \"#{t.name}\" \"#{t.source}\""
+    sh "#{CC} -c #{CPPFLAGS} #{CFLAGS} -o \"#{t.name}\" \"#{t.source}\""
   else
-	  sh "#{CXX} -c #{CPPFLAGS} #{CXXFLAGS} -o \"#{t.name}\" \"#{t.source}\""
+    sh "#{CXX} -c #{CPPFLAGS} #{CXXFLAGS} -o \"#{t.name}\" \"#{t.source}\""
   end
 end
 
