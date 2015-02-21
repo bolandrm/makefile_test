@@ -41,7 +41,7 @@ TOOLS_PATH = "#{ARDUINO_HW_HOME}/tools"
 COMPILER_PATH = "#{ARDUINO_HW_HOME}/tools/arm-none-eabi/bin"
 
 # where to store build output files
-OBJ_DIR = "build"
+OBJ_DIR = ".build"
 
 #************************************************************************
 # Library includes and sources
@@ -60,15 +60,15 @@ INCLUDE_PATHS = SOURCE_FILES.pathmap("%d").uniq
 HEX_FILE = "#{TARGET}.hex"
 ELF_FILE = "#{TARGET}.elf"
 
-puts SOURCE_FILES
-puts
-puts
-puts INCLUDE_PATHS
-puts
-puts
-puts OBJECT_FILES
-puts
-puts
+# puts SOURCE_FILES
+# puts
+# puts
+# puts INCLUDE_PATHS
+# puts
+# puts
+# puts OBJECT_FILES
+# puts
+# puts
 
 #************************************************************************
 # Settings below this point usually do not need to be edited
@@ -124,12 +124,12 @@ SIZE = "#{COMPILER_PATH}/arm-none-eabi-size"
 directory OBJ_DIR
 CLEAN.include(OBJ_DIR)
 
-import ".depends.mf"
+import "#{OBJ_DIR}/.depends.mf"
 #Rake::MakefileLoader.new.load(".depends.mf") if File.file?(".depends.mf")
 
 task :default => HEX_FILE
 
-file HEX_FILE => ELF_FILE do
+file HEX_FILE => [OBJ_DIR, ELF_FILE] do
 	sh "#{SIZE} #{OBJ_DIR}/#{ELF_FILE}"
 	sh "#{OBJCOPY} -O ihex -R .eeprom #{OBJ_DIR}/#{ELF_FILE} #{OBJ_DIR}/#{HEX_FILE}"
 end
@@ -138,8 +138,8 @@ file ELF_FILE => OBJECT_FILES do
   sh "#{CC} #{LDFLAGS} -o #{OBJ_DIR}/#{ELF_FILE} #{OBJECT_FILES} #{LIBS}"
 end
 
-rule ".o" => [->(name){ lookup_source_file(name) }, OBJ_DIR] do |t|
-  puts "#{t.source} -> #{t.name}"
+rule ".o" => ->(name){ lookup_source_file(name) } do |t|
+  puts "COMPL #{t.source} -> #{t.name}"
 
   if File.extname(t.source) == ".c"
 	  sh "#{CC} -c #{CPPFLAGS} #{CFLAGS} -o \"#{t.name}\" \"#{t.source}\""
@@ -148,10 +148,11 @@ rule ".o" => [->(name){ lookup_source_file(name) }, OBJ_DIR] do |t|
   end
 end
 
-file ".depends.mf" => SOURCE_FILES do |t|
+file "#{OBJ_DIR}/.depends.mf" => SOURCE_FILES do |t|
+  mkdir_p OBJ_DIR
   sh "makedepend -f- -- #{CPPFLAGS} -- #{t.prerequisites.join(" ")} > #{t.name}"
 
-  path = ".depends.mf"
+  path = "#{OBJ_DIR}/.depends.mf"
   temp_file = Tempfile.new(".depends.mf.temp")
   File.open(path, 'r') do |file|
     file.each_line do |line|

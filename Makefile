@@ -44,8 +44,6 @@ LIBRARY_INCLUDES := $(foreach libdir,$(LIBRARY_PATHS),-I$(libdir))
 LIBRARY_C_FILES := $(foreach libdir,$(LIBRARY_PATHS),$(wildcard $(libdir)/*.c))
 LIBRARY_CPP_FILES := $(foreach libdir,$(LIBRARY_PATHS),$(wildcard $(libdir)/*.cpp))
 
-VPATH := . $(LIBRARY_PATHS) $(TEENSY_HOME)
-
 #************************************************************************
 # Settings below this point usually do not need to be edited
 #************************************************************************
@@ -75,7 +73,6 @@ SIZE := $(abspath $(COMPILERPATH))/arm-none-eabi-size
 C_FILES := $(wildcard *.c) $(LIBRARY_C_FILES) $(wildcard $(TEENSY_HOME)/*.c)
 CPP_FILES := $(wildcard *.cpp) $(LIBRARY_CPP_FILES) $(wildcard $(TEENSY_HOME)/*.cpp)
 CPP_FILES := $(filter-out $(TEENSY_HOME)/main.cpp, $(CPP_FILES))
-#ABSOLUTE_OBJS := multicopter.o $(C_FILES:.c=.o) $(CPP_FILES:.cpp=.o)
 ABSOLUTE_OBJS := $(C_FILES:.c=.o) $(CPP_FILES:.cpp=.o)
 OBJS := $(addprefix $(OBJ_DIR)/, $(notdir $(ABSOLUTE_OBJS)))
 OBJ_DEPS := $(OBJS:.o=.d)
@@ -88,10 +85,6 @@ all: $(OBJ_DIR) $(TARGET).hex
 $(TARGET).elf: $(OBJS) $(TEENSY_HOME)/mk20dx256.ld
 	@echo "[LINK] $@"
 	@$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
-
-# $(OBJ_DIR)/$(TARGET).o: $(TARGET).ino
-# 	@echo "[INO] $<"
-# 	@$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o "$@" -c -x c++ -include Arduino.h "$<"
 
 %.hex: %.elf
 	$(SIZE) $<
@@ -118,3 +111,6 @@ clean:
 	$(RM) -rf $(OBJ_DIR)
 	$(RM) -f $(TARGET).elf $(TARGET).hex
 .PHONY: clean
+
+deps:
+	makedepend -f- -- $(CPPFLAGS) -- $(CPP_FILES) > .depend.mf
