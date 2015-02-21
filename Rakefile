@@ -5,10 +5,7 @@ require 'tempfile'
 
 TARGET = "multicopter"
 
-USER_LIBRARIES = []
 CORE_LIBRARIES = ["SPI"]
-
-USER_LIB_HOME = "libraries"
 
 # Arduino IDE installation location
 ARDUINO_HOME = "/Applications/Arduino.app/Contents/Resources/Java"
@@ -57,8 +54,8 @@ SOURCE_FILES = FileList.new do |fl|
 end
 OBJECT_FILES = SOURCE_FILES.pathmap("#{OBJ_DIR}/%n.o")
 INCLUDE_PATHS = SOURCE_FILES.pathmap("%d").uniq
-HEX_FILE = "#{TARGET}.hex"
-ELF_FILE = "#{TARGET}.elf"
+HEX_FILE = "#{OBJ_DIR}/#{TARGET}.hex"
+ELF_FILE = "#{OBJ_DIR}/#{TARGET}.elf"
 
 # puts SOURCE_FILES
 # puts
@@ -129,13 +126,17 @@ import "#{OBJ_DIR}/.depends.mf"
 
 task :default => HEX_FILE
 
+task :burn => HEX_FILE do
+  sh "~/hardware/teensy-loader-cli/teensy_loader_cli -w -v -mmcu=mk20dx256 #{HEX_FILE}"
+end
+
 file HEX_FILE => [OBJ_DIR, ELF_FILE] do
-  sh "#{SIZE} #{OBJ_DIR}/#{ELF_FILE}"
-  sh "#{OBJCOPY} -O ihex -R .eeprom #{OBJ_DIR}/#{ELF_FILE} #{OBJ_DIR}/#{HEX_FILE}"
+  sh "#{SIZE} #{ELF_FILE}"
+  sh "#{OBJCOPY} -O ihex -R .eeprom #{ELF_FILE} #{HEX_FILE}"
 end
 
 file ELF_FILE => OBJECT_FILES do
-  sh "#{CC} #{LDFLAGS} -o #{OBJ_DIR}/#{ELF_FILE} #{OBJECT_FILES} #{LIBS}"
+  sh "#{CC} #{LDFLAGS} -o #{ELF_FILE} #{OBJECT_FILES} #{LIBS}"
 end
 
 rule ".o" => ->(name){ lookup_source_file(name) } do |t|
